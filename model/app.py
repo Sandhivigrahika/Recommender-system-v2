@@ -1,7 +1,7 @@
 import streamlit as st
 import pickle
 import pandas as pd
-from tensorflow.keras.models import load_model
+import tensorflow as tf
 import numpy as np
 
 
@@ -10,50 +10,42 @@ import numpy as np
 # ---------------------------
 # Load model + mappings
 # ---------------------------
+# ---------------------------
+# Load model and mappings
+# ---------------------------
 @st.cache_resource
-def load_artifacts():
-    model = load_model("ncf.h5")
-
+def load_model_and_mappings():
+    model = tf.keras.models.load_model("ncf_model.h5")  # update path if needed
     with open("user2id.pkl", "rb") as f:
         user2id = pickle.load(f)
     with open("movie2id.pkl", "rb") as f:
         movie2id = pickle.load(f)
     with open("id2movie.pkl", "rb") as f:
         id2movie = pickle.load(f)
+    return model, user2id, movie2id, id2movie
 
-    movies_df = pd.read_csv("movies.csv")  # must have at least movieId + title
-    return model, user2id, movie2id, id2movie, movies_df
-
-
-model, user2id, movie2id, id2movie, movies_df = load_artifacts()
+model, user2id, movie2id, id2movie = load_model_and_mappings()
 
 
 
 # ---------------------------
 # Recommendation function
-# ---------------------------
-def recommend(user_id, k=10):
+# --------------------------
+def recommend_movies(user_id, top_n=10):
     if user_id not in user2id:
-        return ["User not found. Please onboard as new user."]
-
+        return None #user not found
     uid = user2id[user_id]
-    all_movie_ids = list(movie2id.keys())
+    all_movie_ids = list(movie2id.values())
 
-    # Build input arrays
-    user_input = np.array([uid] * len(all_movie_ids))
-    item_input = np.array([movie2id[mid] for mid in all_movie_ids])
+    user_array = np.full(len(all_movie_ids),uid)
+    movie_array = np.array(all_movie_ids)
 
-    # Predict scores
-    preds = model.predict([user_input, item_input], verbose=0).flatten()
+    preds = model.predict([user_array,movie_array], verbose=0).faltten()
+    top_indices = preds.argsort()[-top_n:][::-1]
 
-    # Sort top-K
-    top_k_idx = preds.argsort()[-k:][::-1]
-    top_movie_ids = [all_movie_ids[i] for i in top_k_idx]
+    recommended_movie = [id2movie[mid] for mid in movie_array[top_indices]]
 
-    # Map back to titles
-    results = movies_df[movies_df["movieId"].isin(top_movie_ids)][["title", "genres"]]
-    return results
-
+    return recommended_movie
 
 # ---------------------------
 # Streamlit UI
